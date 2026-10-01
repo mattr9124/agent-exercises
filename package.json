@@ -5,7 +5,8 @@
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "start": "node --env-file=.env src/index.ts",
+    "ex1": "node --env-file=.env src/exercise-01/index.ts",
+    "ex2": "node --env-file=.env src/exercise-02/index.ts",
     "typecheck": "tsc"
   },
   "keywords": [],
@@ -13,7 +14,8 @@
   "license": "ISC",
   "type": "module",
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.128.0"
+    "@anthropic-ai/sdk": "^0.128.0",
+    "mathjs": "^15.2.0"
   },
   "devDependencies": {
     "@types/node": "^26.6.3",
