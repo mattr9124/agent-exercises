@@ -2,3 +2,4 @@
 /node_modules
 AgentTS.iml
 package-lock.json
+/.mcp.json
