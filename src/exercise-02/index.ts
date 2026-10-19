@@ -1,12 +1,13 @@
 import {Anthropic} from "@anthropic-ai/sdk";
 import * as readLine from "node:readline/promises";
 import {stdin as input, stdout as output} from "node:process";
+import {evaluate} from "mathjs";
 
 const CLIENT = new Anthropic();
 
 const MODEL = 'claude-sonnet-5';
 const MAX_TOKENS = 4096;
-const MAX_TURNS = 4;
+const MAX_TURNS = 10;
 
 type SubagentInput = {
     task: string,
@@ -15,22 +16,24 @@ type SubagentInput = {
 };
 
 const TOOL_REGISTRY: Record<string, (input: any) => string> = {
-    // delegate_to_subagent: spawnSubagent
+    calculator: handleExpression,
+    web_search: search
 }
-
 
 export class Agent {
     readonly client: Anthropic;
     readonly maxTokens: number;
     readonly maxTurns: number;
     readonly tools: Anthropic.Tool[];
+    protected systemPrompt?: string;
     private token_counter: number = 0;
 
-    constructor(client: Anthropic, maxTokens: number, maxTurns: number, tools: Anthropic.Tool[]) {
+    constructor(client: Anthropic, maxTokens: number, maxTurns: number, tools: Anthropic.Tool[], systemPrompt?: string) {
         this.client = client;
         this.maxTokens = maxTokens;
         this.maxTurns = maxTurns;
         this.tools = tools;
+        this.systemPrompt = systemPrompt;
     }
 
     async executeAgentTurn(messages: Anthropic.MessageParam[]) {
@@ -39,6 +42,7 @@ export class Agent {
                 {
                     model: MODEL,
                     max_tokens: MAX_TOKENS,
+                    system: this.systemPrompt,
                     tools: this.tools,
                     messages: messages
                 }
@@ -48,34 +52,61 @@ export class Agent {
             messages.push({role: "assistant", content: message.content});
 
             console.log('stop reason', message.stop_reason);
-            if (this.processEndTurn(message)) {
-                break;
+
+            const turnResult = this.processEndTurn(message);
+            if (turnResult !== undefined) {
+                return turnResult;
             }
-            this.processTools(message, messages);
+            const toolResults: Anthropic.ToolResultBlockParam[] = await this.processTools(message);
+
+            if (toolResults.length > 0) {
+                messages.push({role: 'user', content: toolResults});
+            }
         }
+        throw new Error(`Ran out of turns (${MAX_TURNS})`);
     }
 
-    protected processTools(message: Anthropic.Message , messages: Anthropic.MessageParam[]) {
+    protected async processTools(message: Anthropic.Message) {
         const toolResults: Anthropic.ToolResultBlockParam[] = [];
 
-        // process result
-        message.content.forEach(block => {
+        for (const block of message.content) {
             switch (block.type) {
                 case "text":
                     console.log(block.text);
                     break;
                 case "tool_use":
-                    const toolResult = TOOL_REGISTRY[block.name](block.input);
+                    try {
+                        const toolResult = await this.executeTool(block);
+
+                        toolResults.push({
+                            type: "tool_result",
+                            tool_use_id: block.id,
+                            content: toolResult
+                        });
+                    } catch (e) {
+                        const errorMessage = e instanceof Error ? e.message : String(e);
+                        console.error(errorMessage);
+                        toolResults.push({
+                            type: "tool_result",
+                            tool_use_id: block.id,
+                            content: errorMessage,
+                            is_error: true
+                        });
+                    }
 
                     break;
                 default:
                     console.log(block.type);
             }
-        })
-
-        if (toolResults.length > 0) {
-            messages.push({role: 'user', content: toolResults});
         }
+
+        return toolResults;
+    }
+
+    protected async executeTool(toolUseBlock: Anthropic.ToolUseBlock): Promise<string> {
+        const toolFunction = TOOL_REGISTRY[toolUseBlock.name];
+        // call it
+        return toolFunction(toolUseBlock.input);
     }
 
     protected incrementTokenCounter(message: Anthropic.Message) {
@@ -85,15 +116,17 @@ export class Agent {
         console.log('Total tokens for the session: ', this.token_counter);
     }
 
-    protected  processEndTurn(message: Anthropic.Message) {
+    protected processEndTurn(message: Anthropic.Message): string | undefined {
         if (message.stop_reason == 'end_turn') {
-            message.content
+            const result = message.content
                 .filter(block => block.type == 'text')
-                .forEach(block => console.log(block.text));
+                .map(block => block.text)
+                .join('\n');
+
+            console.debug('End turn result: ', result)
             console.debug('end turn reached');
-            return true;
+            return result;
         }
-        return false;
     }
 }
 
@@ -107,7 +140,7 @@ export class Coordinator extends Agent {
     Refinement
      */
 
-    private systemPrompt: string = `
+    protected systemPrompt: string = `
     You are a coordinator in a multi agent system.
     
     Your role is to handle take user queries and then perform the following tasks:
@@ -127,14 +160,12 @@ export class Coordinator extends Agent {
     If not revisit the 4 steps as necessary, iterate until the result satisfies these conditions.
     `;
 
-
     private messages: Anthropic.MessageParam[] = [];
 
-    private SPAWN_SUBAGENT_TOOL: Anthropic.Tool[];
+    readonly ALL_TOOLS: Anthropic.Tool[];
 
     constructor(client: Anthropic, maxTokens: number, maxTurns: number, tools: Anthropic.Tool[]) {
-        super(client, maxTokens, maxTurns, tools);
-        this.SPAWN_SUBAGENT_TOOL =  [{
+        super(client, maxTokens, maxTurns, [{
             name: "delegate_to_subagent",
             description: "spawn a subagent to perform some task",
             input_schema: {
@@ -159,75 +190,30 @@ export class Coordinator extends Agent {
                 },
                 required: ["task", "system_prompt", "tools"]
             }
-        }];
+        }]);
+        this.ALL_TOOLS = tools;
     }
 
-    async runCoordinator(query: string) {
-
-        this.messages.push({
-            role: "user", content: query
-        });
-
-        for (let turn = 0; turn < MAX_TURNS; turn++) {
-            // let model = this.model;
-            const message: Anthropic.Message = await CLIENT.messages.create(
-                {
-                    model: MODEL,
-                    max_tokens: this.maxTokens,
-                    system: this.systemPrompt,
-                    messages: this.messages,
-                    tools: this.SPAWN_SUBAGENT_TOOL
-                }
-            );
-
-            this.incrementTokenCounter(message);
-
-            this.messages.push({role: "assistant", content: message.content});
-
-            console.log('stop reason', message.stop_reason);
-            if (this.processEndTurn(message)) {
-                break;
-            }
-
-            // delegate_to_subagent/
+    protected async executeTool(toolUseBlock: Anthropic.ToolUseBlock): Promise<string> {
+        if (toolUseBlock.name == 'delegate_to_subagent') {
+            return this.spawnSubagent(toolUseBlock.input as SubagentInput);
         }
+        return super.executeTool(toolUseBlock);
     }
 
-    protected processTools(message: Anthropic.Message , messages: Anthropic.MessageParam[]) {
-        const toolResults: Anthropic.ToolResultBlockParam[] = [];
+    async spawnSubagent(input: SubagentInput): Promise<string> {
 
-        // process result
-        message.content.forEach(block => {
-            switch (block.type) {
-                case "text":
-                    console.log(block.text);
-                    break;
-                case "tool_use":
-                    // const toolResult = TOOL_REGISTRY[block.name](block.input);
-                    if (block.name == 'delegate_to_subagent') {
-                        this.spawnSubagent(block.input as SubagentInput)
-                    }
-                    break;
-                default:
-                    console.log(block.type);
-            }
-        })
-
-        if (toolResults.length > 0) {
-            messages.push({role: 'user', content: toolResults});
-        }
-    }
-
-    async spawnSubagent(input: SubagentInput) {
+        console.debug('SPAWNING SUBAGENT');
 
         const tools: Anthropic.Tool[] = this.extractTools(input.tools);
 
-        const subagent = new Agent(CLIENT, MAX_TOKENS, MAX_TURNS, tools);
+        const subagent = new Agent(CLIENT, MAX_TOKENS, MAX_TURNS, tools, input.system_prompt);
 
+        return subagent.executeAgentTurn([{role: "user", content: input.task}]);
     }
 
     private extractTools(tools: string[]) {
-        return this.tools.filter(t => tools.includes(t.name) && t.name != 'delegate_to_subagent');
+        return this.ALL_TOOLS.filter(t => tools.includes(t.name));
     }
 }
 
@@ -235,8 +221,45 @@ export class Coordinator extends Agent {
 const line_reader = readLine.createInterface({input, output})
 
 const messages: Anthropic.MessageParam[] = [];
-
+const client = new Anthropic();
 let userInput: string;
+
+const tools: Anthropic.Tool[] = [
+    {
+        name: "calculator",
+        description: "A basic calculator that will accept normal mathematical expressions and return the result",
+        input_schema: {
+            type: "object",
+            properties: {
+                expression: {
+                    type: "string",
+                    description: "A standard mathematical expression such as 2+2"
+                },
+            },
+            required: [
+                "expression"
+            ]
+        }
+    },
+    {
+        name: "web_search",
+        description: "Takes a search query and will search the web for it",
+        input_schema: {
+            type: "object",
+            properties: {
+                query: {
+                    type: "string",
+                    description: "Search query"
+                },
+            },
+            required: [
+                "query"
+            ]
+        }
+    }
+];
+
+const coordinator = new Coordinator(client, MAX_TOKENS, MAX_TURNS, tools);
 
 while (true) {
     userInput = await line_reader.question('You: ');
@@ -247,10 +270,30 @@ while (true) {
 
     messages.push({role: 'user', content: userInput});
 
+    const result = await coordinator.executeAgentTurn(messages);
+
+    console.log(result);
 
 }
 
 line_reader.close();
 
+function handleExpression(input: {expression: string}) {
+    const expr = input.expression;
+    try {
+        console.log(`Evaluating ${expr} using tool`);
+        const evalResult = evaluate(expr);
+        console.log('Eval result', evalResult)
+        return String(evalResult);
+    } catch (e) {
+        console.error(`Unable to evaluate expression ${expr}`, e);
+        return 'An error occurred ' + e;
+    }
+}
 
+function search(input: {query: string}) {
+    const query = input.query;
+
+    return `Search results for "${query}": test only - mock service`;
+}
 
