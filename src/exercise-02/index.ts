@@ -67,38 +67,33 @@ export class Agent {
     }
 
     protected async processTools(message: Anthropic.Message) {
-        const toolResults: Anthropic.ToolResultBlockParam[] = [];
 
-        for (const block of message.content) {
-            switch (block.type) {
-                case "text":
-                    console.log(block.text);
-                    break;
-                case "tool_use":
+        message.content
+            .filter(block => block.type == 'text')
+            .forEach(block => console.log(block.text));
+
+        const toolResults: Anthropic.ToolResultBlockParam[] = await Promise.all(
+            message.content
+                .filter(block => block.type == 'tool_use')
+                .map(async block => {
                     try {
-                        const toolResult = await this.executeTool(block);
-
-                        toolResults.push({
+                        return {
                             type: "tool_result",
                             tool_use_id: block.id,
-                            content: toolResult
-                        });
+                            content: await this.executeTool(block)
+                        }
                     } catch (e) {
                         const errorMessage = e instanceof Error ? e.message : String(e);
                         console.error(errorMessage);
-                        toolResults.push({
+                        return {
                             type: "tool_result",
                             tool_use_id: block.id,
                             content: errorMessage,
                             is_error: true
-                        });
+                        };
                     }
-
-                    break;
-                default:
-                    console.log(block.type);
-            }
-        }
+                })
+        )
 
         return toolResults;
     }
@@ -150,8 +145,9 @@ export class Coordinator extends Agent {
     of renewable energy you can. You might need to search the web in order to get the full list. So for renewable 
     energy you might decompose into covers solar, wind, geothermal, tidal, biomass, and fusion.
     * Delegation
-    After decomposition, create subagents to handle each tasks. To spawn a sub-agent, use the provided tool
-    }
+    After decomposition, create subagents to handle each tasks. To spawn a sub-agent, use the provided tool.
+    Subagents can run in parallel so you can create multiple subagents in one turn.
+    
     * Aggregation
     Wait until all subagents have completed their tasks and combine the results
     * Refinement
@@ -278,7 +274,7 @@ while (true) {
 
 line_reader.close();
 
-function handleExpression(input: {expression: string}) {
+function handleExpression(input: { expression: string }) {
     const expr = input.expression;
     try {
         console.log(`Evaluating ${expr} using tool`);
@@ -291,7 +287,7 @@ function handleExpression(input: {expression: string}) {
     }
 }
 
-function search(input: {query: string}) {
+function search(input: { query: string }) {
     const query = input.query;
 
     return `Search results for "${query}": test only - mock service`;
