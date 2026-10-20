@@ -156,8 +156,6 @@ export class Coordinator extends Agent {
     If not revisit the 4 steps as necessary, iterate until the result satisfies these conditions.
     `;
 
-    private messages: Anthropic.MessageParam[] = [];
-
     readonly ALL_TOOLS: Anthropic.Tool[];
 
     constructor(client: Anthropic, maxTokens: number, maxTurns: number, tools: Anthropic.Tool[]) {
