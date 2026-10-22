@@ -3,3 +3,4 @@
 AgentTS.iml
 package-lock.json
 /.mcp.json
+/.env
