@@ -1,4 +1,5 @@
-import {query, type AgentDefinition, type SDKMessage} from "@anthropic-ai/claude-agent-sdk";
+import {query, type AgentDefinition} from "@anthropic-ai/claude-agent-sdk";
+import {logMessage} from "../shared/log.ts";
 import * as readLine from "node:readline/promises";
 import {stdin as input, stdout as output} from "node:process";
 
@@ -82,35 +83,3 @@ while (true) {
 }
 
 line_reader.close();
-
-function logMessage(message: SDKMessage) {
-    const who = 'parent_tool_use_id' in message && message.parent_tool_use_id ? '  [sub]' : '[coord]';
-
-    switch (message.type) {
-        case 'system':
-            switch (message.subtype) {
-                case 'init':
-                    console.log(`[init] model=${message.model} agents=${message.agents?.join(', ')} tools=${message.tools.length}`);
-                    break;
-                case 'task_started':
-                    console.log(`-> ${message.subagent_type} started: ${message.description}`);
-                    break;
-                case 'task_notification':
-                    console.log(`<- ${message.status}: ${message.summary} (${message.usage?.total_tokens} tokens)`);
-                    break;
-                case 'permission_denied':
-                    console.log(`!! denied ${message.tool_name}: ${message.decision_reason}`);
-                    break;
-            }
-            break;
-        case 'assistant':
-            for (const block of message.message.content) {
-                if (block.type == 'text') console.log(`${who} ${block.text}`);
-                if (block.type == 'tool_use') console.log(`${who} calls ${block.name}`, JSON.stringify(block.input));
-            }
-            break;
-        case 'result':
-            console.log(`[done] turns=${message.num_turns} ${message.duration_ms}ms $${message.total_cost_usd.toFixed(4)}`);
-            break;
-    }
-}
