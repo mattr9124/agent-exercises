@@ -16,7 +16,7 @@ Learning project: hands-on exercises for the Claude certification (agentic archi
 
 ## Commands
 
-- `npm run ex1` / `ex1a` / `ex2` / `ex2a` / `ex3` / `ex4` / `ex5` — run an exercise (loads `.env` via `--env-file`).
+- `npm run ex1` / `ex1a` / `ex2` / `ex2a` / `ex3` / `ex4` / `ex5` / `ex5a` — run an exercise (loads `.env` via `--env-file`).
 - `npm run typecheck` — `tsc` with `noEmit`. There is no build step and no test suite.
 
 ## Conventions

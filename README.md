@@ -12,7 +12,8 @@ Hands-on exercises for the Claude certification's agentic architecture topics, i
 | `npm run ex2a` | `src/exercise-02a` | The same with the Agent SDK: planner, researcher, synthesizer and reviewer subagents, session `resume` |
 | `npm run ex3` | `src/exercise-03` | Subagent context passing: findings carry source metadata (URL, document, page, confidence) through to synthesis |
 | `npm run ex4` | `src/exercise-04` | Customer support agent with in-process MCP tools (`createSdkMcpServer`): a code-enforced gate on `process_refund` vs rules only the prompt enforces. Sample prompts in `sample-prompts.txt` |
-| `npm run ex5` | `src/exercise-05` | Next exercise (in progress) |
+| `npm run ex5` | `src/exercise-05` | PostToolUse hook normalizing mixed date and status formats from three mock tools to ISO 8601 and English words |
+| `npm run ex5a` | `src/exercise-05a` | PreToolUse hook on the exercise 4 refund agent: denies refunds above $500 before `process_refund` runs and tells the model to escalate to a human |
 
 `src/shared/log.ts` prints Agent SDK message streams in a readable form: which subagent is talking, which model it uses, and the cost and models used per run.
 

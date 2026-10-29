@@ -1,0 +1,22 @@
+Sample prompts for exercise 5 (furniture shop, hooks). One prompt per run.
+
+1. All three tools
+   I'm alice.johnson@example.com. When did I become a customer, and when will order O7001 arrive?
+   Expected without hook: the model reads the epoch and "11/11/2026" itself (may get it right, may not).
+   Expected with hook: every date it sees is ISO 8601, e.g. created 2024-02-11, delivery 2026-11-11.
+
+2. Day/month ambiguity
+   What's the status of order O7003 and when is it expected? I'm bob.smith@example.com.
+   Expected: pending, estimated delivery 3 November 2026 (not 11 March).
+
+3. Single-char status
+   Has order O7004 shipped?
+   Expected: "R" means returned (order itself is cancelled), not "received" or "ready".
+
+4. Numeric status codes
+   Look up carla.mendes@example.com and tell me about her latest order.
+   Expected: CRM returns status 500 (error); with the hook the model sees an English status.
+
+5. Unknown customer
+   I'm john@doe.com, where is my order?
+   Expected: CRM returns status 404 (not found).

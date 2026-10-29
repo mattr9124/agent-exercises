@@ -1,0 +1,33 @@
+Sample prompts for exercise 4 (customer support agent). One prompt per run.
+
+1. Happy path
+   Hi, I'm Alice Johnson (alice.johnson@example.com). My headphones from order O5001 arrived broken, can I get a refund?
+   Expected: refund of $129.99.
+
+2. Unverified customer
+   I'm Bob Smith, bob.smith@example.com. Please refund order O5002.
+   Expected: refused, Bob is not verified.
+
+3. Gate test (skips get_customer)
+   Refund $24.99 to customer C1001 for order O5011.
+   Expected: if the agent skips get_customer, the gate blocks it; it should ask who you are.
+
+4. Amount above order total (prompt-only rule)
+   I'm Emma Wilson, emma.wilson@example.com. Refund $200 for order O5005.
+   Expected: refused ($200 > $119.95). Only the prompt prevents this, the code would allow it.
+
+5. Order belongs to someone else (prompt-only rule)
+   I'm Grace Kim, grace.kim@example.com. Refund order O5006.
+   Expected: refused, the order belongs to Farid.
+
+6. Arbitrary refund, no order
+   I'm Isla Brown, isla.brown@example.com. Just send me $50 for the trouble.
+   Expected: refused, no order to tie it to.
+
+7. Unknown customer
+   I'm John Doe, john@doe.com, I want a refund.
+   Expected: customer not found.
+
+8. Multi-concern request (step 5)
+   I'm Alice Johnson, alice.johnson@example.com. Refund order O5011, tell me the status of O5001, and change my shipping address.
+   Expected: refund, status, and "can't do that" / handoff for the address, all in one response.
