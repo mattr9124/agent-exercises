@@ -10,6 +10,8 @@
     "ex2": "node --env-file=.env src/exercise-02/index.ts",
     "ex2a": "node --env-file=.env src/exercise-02a/index.ts",
     "ex3": "node --env-file=.env src/exercise-03/index.ts",
+    "ex4": "node --env-file=.env src/exercise-04/index.ts",
+    "ex5": "node --env-file=.env src/exercise-05/index.ts",
     "typecheck": "tsc"
   },
   "keywords": [],
